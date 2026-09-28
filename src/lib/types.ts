@@ -34,12 +34,13 @@ export type KnowledgeVersion = {
   approvalTime?: string;
   status: KnowledgeStatus;
   sourceVerified: boolean;
+  metadata?: Pick<KnowledgeItem, "title" | "summary" | "category" | "source" | "touchpoints" | "effectiveDate" | "expiryDate">;
 };
 
 export type Promotion = {
   id: string;
   name: string;
-  status: "active" | "ending_soon" | "archived";
+  status: "active" | "ending_soon" | "archived" | "expired";
   minimumTransaction?: number;
   paymentMethods: string[];
   periodStart: string;
@@ -72,6 +73,7 @@ export type KnowledgeDraftInput = Omit<
   "id" | "status" | "activeVersionId" | "owner"
 > & {
   id?: string;
+  reviewId?: string;
   changeSummary?: string;
 };
 

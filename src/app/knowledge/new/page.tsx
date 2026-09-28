@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Check, LockKeyhole } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -10,6 +11,7 @@ import { can, roleLabels } from "@/lib/permissions";
 import { useKms } from "@/lib/store/kms-store";
 import { PageIntro, SurfaceCard } from "@/components/kms/primitives";
 import { Button } from "@/components/ui/button";
+import { localDate } from "@/lib/utils";
 
 const schema = z
   .object({
@@ -35,26 +37,44 @@ const defaults: FormValues = {
   category: "Promosi & pembayaran",
   touchpoint: "Kasir",
   source: "Dokumen ketentuan terverifikasi",
-  effectiveDate: "2026-09-01",
-  expiryDate: "2026-09-30",
+  effectiveDate: localDate(),
+  expiryDate: localDate(30),
   summary: "Cantumkan syarat yang perlu diketahui pelanggan sebelum transaksi diproses.",
   content: "Petugas memastikan periode, nilai minimum transaksi, metode pembayaran, kuota, dan pengecualian sebelum mengonfirmasi promo.",
   changeSummary: "Panduan konfirmasi promo ditambahkan.",
 };
 
-export default function KnowledgeEditorPage() {
+export default function KnowledgeEditorPage() { return <Suspense fallback={<div className="pt-12 text-muted">Memuat formulir...</div>}><KnowledgeEditor /></Suspense>; }
+
+function KnowledgeEditor() {
   const router = useRouter();
-  const { data, saveDraft, submitForReview } = useKms();
+  const params = useSearchParams();
+  const { data, loading, saveDraft, submitForReview } = useKms();
+  const editId = params.get("edit");
+  const reviewId = params.get("review");
+  const review = data.reviews.find((entry) => entry.id === reviewId && entry.knowledgeId === editId);
+  const item = data.knowledge.find((entry) => entry.id === editId);
+  const version = data.versions.find((entry) => entry.id === review?.versionId);
+  const [currentId, setCurrentId] = useState<string | null>(editId);
+  const validRevision = !editId || (review?.status === "needs_revision" && !!item && !!version);
   const editable = can(data.role, "edit");
   const submittable = can(data.role, "submit");
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults });
+  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults });
+
+  useEffect(() => {
+    if (!loading && editId && review && item && version) {
+      const metadata = version.metadata ?? item;
+      reset({ title: metadata.title, category: metadata.category, touchpoint: metadata.touchpoints[0] ?? "Kasir", source: metadata.source, effectiveDate: metadata.effectiveDate, expiryDate: metadata.expiryDate ?? localDate(30), summary: metadata.summary, content: version.content, changeSummary: version.changeSummary });
+    }
+  }, [loading, editId, review, item, version, reset]);
 
   function mapInput(values: FormValues) {
-    return { ...values, touchpoints: [values.touchpoint] };
+    return { ...values, touchpoints: [values.touchpoint], id: currentId ?? undefined, reviewId: review?.status === "needs_revision" ? review.id : undefined };
   }
 
   const draft = handleSubmit((values) => {
     const item = saveDraft(mapInput(values));
+    setCurrentId(item.id);
     toast.success(`Draf “${item.title}” tersimpan.`);
   });
 
@@ -66,9 +86,11 @@ export default function KnowledgeEditorPage() {
 
   return (
     <>
-      <PageIntro before="Tambah atau perbarui pengetahuan" accent="layanan." description="Setiap perubahan membutuhkan sumber, pemilik, dan tanggal berlaku sebelum dikirim untuk review." compact />
+      <PageIntro before={editId ? "Perbaiki pengajuan" : "Tambah atau perbarui pengetahuan"} accent="layanan." description={editId ? "Formulir ini memuat pengajuan yang dikembalikan. Versi terbit tetap aktif sampai revisi disetujui." : "Setiap perubahan membutuhkan sumber, pemilik, dan tanggal berlaku sebelum dikirim untuk review."} compact />
       <div className="grid gap-6 xl:grid-cols-[2.05fr_1fr]">
         <SurfaceCard className="p-6 md:p-8">
+          {!loading && editId && !validRevision && <div role="alert" className="mb-5 rounded-lg border border-[#7f3035] bg-[#3b1b1e] p-4 text-sm text-destructive">Pengajuan revisi tidak ditemukan atau sudah dikirim ulang. Buka antrean review untuk melihat status terbaru.</div>}
+          {editId && validRevision && <div className="mb-5 rounded-lg border border-[#675b24] bg-[#3a3315] p-4 text-sm text-warning">Memperbaiki pengajuan {review?.id} untuk “{item?.title}”. Versi aktif {data.versions.find((entry) => entry.id === item?.activeVersionId)?.version ?? "belum ada"} tetap tersedia.</div>}
           {!editable && <div className="mt-5 flex gap-3 rounded-lg border border-[#675b24] bg-[#3a3315] p-4 text-sm text-warning"><LockKeyhole size={18} className="shrink-0" /> Peran {roleLabels[data.role]} hanya memiliki akses baca. Ubah peran melalui avatar untuk mengelola konten.</div>}
           <form className="grid gap-5 md:grid-cols-2" noValidate>
             <Field id="title-error" className="md:col-span-2" label="Judul pengetahuan" error={errors.title?.message}><input {...register("title")} disabled={!editable} className="field-control" aria-invalid={!!errors.title} aria-describedby={errors.title ? "title-error" : undefined} /></Field>
@@ -84,7 +106,7 @@ export default function KnowledgeEditorPage() {
         </SurfaceCard>
         <SurfaceCard className="h-fit p-6 md:p-8">
           <div className="space-y-0">{[["01", "Simpan draf", "Konten belum terlihat staf."], ["02", "Kirim untuk review", "Reviewer memeriksa sumber."], ["03", "Terbitkan versi aktif", "Hanya versi disetujui digunakan."]].map(([number, title, desc], index) => <div key={number} className="relative flex gap-4 pb-8"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#123b29] text-[10px] font-bold text-accent">{number}</span>{index < 2 && <span className="absolute left-[15px] top-8 h-8 w-px bg-border" />}<div><h2 className="font-semibold">{title}</h2><p className="mt-1 text-xs leading-5 text-muted">{desc}</p></div></div>)}</div>
-          <div className="mt-2 space-y-3"><Button className="w-full" onClick={draft} disabled={!editable || isSubmitting}>Simpan draf</Button><Button variant="primary" className="w-full" onClick={submit} disabled={!submittable || isSubmitting}>Kirim untuk review</Button></div>
+          <div className="mt-2 space-y-3"><Button className="w-full" onClick={draft} disabled={!editable || !validRevision || isSubmitting}>Simpan draf</Button><Button variant="primary" className="w-full" onClick={submit} disabled={!submittable || !validRevision || isSubmitting}>{editId ? "Kirim ulang revisi" : "Kirim untuk review"}</Button></div>
           <p className="mt-4 flex gap-2 text-[11px] leading-5 text-dim"><Check size={14} className="mt-0.5 shrink-0 text-success" /> Form diperiksa per field sebelum pengajuan dikirim.</p>
         </SurfaceCard>
       </div>

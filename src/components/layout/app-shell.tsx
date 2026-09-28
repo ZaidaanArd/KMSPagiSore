@@ -95,7 +95,7 @@ function Shell({ children }: { children: ReactNode }) {
       <div className="relative mx-auto flex min-h-screen max-w-[1440px] flex-col px-5 md:px-8 xl:px-[74px]">
         <header className="flex h-24 items-center justify-between border-b border-[#2e2e30]">
           <Link href="/" className="min-w-fit rounded-md">
-            <span className="block font-display text-xl font-bold tracking-[-.4px]">Pagi Sore</span>
+            <span className="block font-display text-xl font-bold tracking-[-.4px]">Pagi Sore</span><span className="block text-[9px] font-semibold uppercase tracking-[1px] text-accent">Data simulasi</span>
           </Link>
           <nav className="hidden rounded-[9px] border border-border bg-surface p-1 md:flex" aria-label="Navigasi utama">
             {desktopNav.map((item) => (
@@ -106,7 +106,7 @@ function Shell({ children }: { children: ReactNode }) {
           </nav>
           <RoleMenu />
         </header>
-        <main id="main-content" className="flex-1 pb-12"><div key={pathname} className="page-enter">{children}</div></main>
+        <main id="main-content" className="flex-1 pb-32 md:pb-12"><div key={pathname} className="page-enter">{children}</div></main>
       </div>
       <nav className="fixed bottom-3 left-1/2 z-40 flex w-[calc(100%-32px)] max-w-[390px] -translate-x-1/2 justify-around rounded-[18px] border border-border bg-[#111113]/95 px-1 py-1.5 shadow-2xl backdrop-blur md:hidden" aria-label="Navigasi mobile">
         {mobileNav.map(({ href, label, icon: Icon }) => {

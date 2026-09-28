@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, CreditCard, ReceiptText, Utensils } from "lucide-react";
 import { useKms } from "@/lib/store/kms-store";
-import { formatDate } from "@/lib/utils";
+import { formatDate, knowledgeStatus } from "@/lib/utils";
 import { ErrorState, LinkButton, LoadingBlocks, StatusBadge, SurfaceCard } from "@/components/kms/primitives";
 
 const touchpoints = [
@@ -38,7 +38,7 @@ export default function DashboardPage() {
         ) : (
           <SurfaceCard className="self-end p-7 md:p-8 xl:mt-16">
             <div className="flex justify-end">
-              <StatusBadge status={featured.status} />
+              <StatusBadge status={knowledgeStatus(featured)} />
             </div>
             <h2 className="mt-5 font-display text-[27px] font-semibold tracking-[-.6px]">Panduan struk & parkir</h2>
             <div className="mt-7 grid gap-5 border-t border-border pt-5 sm:grid-cols-2">

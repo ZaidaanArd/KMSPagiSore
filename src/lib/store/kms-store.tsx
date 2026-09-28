@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { cloneSeedData } from "@/lib/mock-data";
+import { cloneSeedData, seedData } from "@/lib/mock-data";
 import type {
   IssueReport,
   KmsData,
@@ -38,7 +38,7 @@ type StoreContext = {
 type Action =
   | { type: "replace"; data: KmsData }
   | { type: "role"; role: Role }
-  | { type: "upsert-knowledge"; item: KnowledgeItem; version: KnowledgeVersion; submit: boolean }
+  | { type: "upsert-knowledge"; item: KnowledgeItem; version: KnowledgeVersion; submit: boolean; reviewId?: string }
   | { type: "approve"; reviewId: string }
   | { type: "revision"; reviewId: string }
   | { type: "report"; report: IssueReport };
@@ -51,15 +51,20 @@ function reducer(state: KmsData, action: Action): KmsData {
   }
   if (action.type === "upsert-knowledge") {
     const exists = state.knowledge.some((item) => item.id === action.item.id);
+    const oldReview = state.reviews.find((entry) => entry.id === action.reviewId && entry.knowledgeId === action.item.id);
+    const oldItem = state.knowledge.find((entry) => entry.id === action.item.id);
+    const publishedItem = oldItem?.activeVersionId ? oldItem : action.item;
     const knowledge = exists
-      ? state.knowledge.map((item) => (item.id === action.item.id ? action.item : item))
+      ? state.knowledge.map((item) => (item.id === action.item.id ? publishedItem : item))
       : [action.item, ...state.knowledge];
     return {
       ...state,
       knowledge,
-      versions: [action.version, ...state.versions],
+      versions: oldReview
+        ? state.versions.map((version) => version.id === oldReview.versionId ? { ...action.version, id: version.id, status: action.submit ? "review" : "needs_revision" } : version)
+        : [action.version, ...state.versions],
       reviews: action.submit
-        ? [
+        ? oldReview ? state.reviews.map((entry) => entry.id === oldReview.id ? { ...entry, status: "review", submittedAt: new Date().toISOString() } : entry) : [
             {
               id: makeId("review"),
               knowledgeId: action.item.id,
@@ -81,9 +86,7 @@ function reducer(state: KmsData, action: Action): KmsData {
       reviews: state.reviews.map((entry) =>
         entry.id === action.reviewId ? { ...entry, status: "needs_revision" } : entry,
       ),
-      knowledge: state.knowledge.map((item) =>
-        item.id === review.knowledgeId ? { ...item, status: "needs_revision" } : item,
-      ),
+      knowledge: state.knowledge.map((item) => item.id === review.knowledgeId && !item.activeVersionId ? { ...item, status: "needs_revision" } : item),
       versions: state.versions.map((version) =>
         version.id === review.versionId ? { ...version, status: "needs_revision" } : version,
       ),
@@ -91,7 +94,7 @@ function reducer(state: KmsData, action: Action): KmsData {
   }
   if (action.type === "approve") {
     const review = state.reviews.find((entry) => entry.id === action.reviewId);
-    if (!review) return state;
+    if (!review || review.status !== "review") return state;
     const approvedVersion = state.versions.find((version) => version.id === review.versionId);
     return {
       ...state,
@@ -101,6 +104,7 @@ function reducer(state: KmsData, action: Action): KmsData {
           ? {
               ...item,
               content: approvedVersion?.content ?? item.content,
+              ...approvedVersion?.metadata,
               status: "active",
               activeVersionId: review.versionId,
             }
@@ -137,6 +141,27 @@ function slugify(value: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+function restoreDemoDates(stored: KmsData): KmsData {
+  const fresh = cloneSeedData();
+  return {
+    ...stored,
+    knowledge: stored.knowledge.map((item) => {
+      const original = seedData.knowledge.find((entry) => entry.id === item.id);
+      const replacement = fresh.knowledge.find((entry) => entry.id === item.id);
+      return original && replacement && item.effectiveDate === original.effectiveDate && item.expiryDate === original.expiryDate
+        ? { ...item, effectiveDate: replacement.effectiveDate, expiryDate: replacement.expiryDate }
+        : item;
+    }),
+    promotions: stored.promotions.map((promo) => {
+      const original = seedData.promotions.find((entry) => entry.id === promo.id);
+      const replacement = fresh.promotions.find((entry) => entry.id === promo.id);
+      return original && replacement && promo.periodStart === original.periodStart && promo.periodEnd === original.periodEnd
+        ? { ...promo, periodStart: replacement.periodStart, periodEnd: replacement.periodEnd }
+        : promo;
+    }),
+  };
+}
+
 export function KmsProvider({ children }: { children: ReactNode }) {
   const [data, dispatch] = useReducer(reducer, cloneSeedData());
   const [loading, setLoading] = useState(true);
@@ -149,7 +174,7 @@ export function KmsProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
-        dispatch({ type: "replace", data: stored ? (JSON.parse(stored) as KmsData) : cloneSeedData() });
+        dispatch({ type: "replace", data: stored ? restoreDemoDates(JSON.parse(stored) as KmsData) : cloneSeedData() });
       } catch {
         setError("Data tersimpan tidak dapat dibaca. Reset untuk memuat ulang data awal.");
       } finally {
@@ -163,7 +188,7 @@ export function KmsProvider({ children }: { children: ReactNode }) {
     const timer = window.setTimeout(() => {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
-        dispatch({ type: "replace", data: stored ? (JSON.parse(stored) as KmsData) : cloneSeedData() });
+        dispatch({ type: "replace", data: stored ? restoreDemoDates(JSON.parse(stored) as KmsData) : cloneSeedData() });
       } catch {
         setError("Data tersimpan tidak dapat dibaca. Reset untuk memuat ulang data awal.");
       } finally {
@@ -180,27 +205,37 @@ export function KmsProvider({ children }: { children: ReactNode }) {
 
   function upsert(input: KnowledgeDraftInput, submit: boolean) {
     const id = input.id || `${slugify(input.title)}-${Date.now().toString(36).slice(-4)}`;
+    const previous = data.knowledge.find((entry) => entry.id === id);
+    const pendingReview = data.reviews.find((entry) => entry.id === input.reviewId && entry.knowledgeId === id && entry.status === "needs_revision");
     const existingVersions = data.versions.filter((version) => version.knowledgeId === id);
     const versionNumber = `v1.${existingVersions.length + 1}`;
-    const versionId = makeId("version");
+    const versionId = pendingReview?.versionId ?? makeId("version");
     const item: KnowledgeItem = {
-      ...input,
+      title: input.title,
+      content: input.content,
+      summary: input.summary,
+      category: input.category,
+      source: input.source,
+      touchpoints: input.touchpoints,
+      effectiveDate: input.effectiveDate,
+      expiryDate: input.expiryDate,
       id,
-      owner: "Pemilik konten",
+      owner: previous?.owner ?? "Pemilik konten",
       status: submit ? "review" : "draft",
-      activeVersionId: data.knowledge.find((entry) => entry.id === id)?.activeVersionId,
+      activeVersionId: previous?.activeVersionId,
     };
     const version: KnowledgeVersion = {
       id: versionId,
       knowledgeId: id,
-      version: versionNumber,
+      version: pendingReview ? data.versions.find((entry) => entry.id === pendingReview.versionId)?.version ?? versionNumber : versionNumber,
       changeSummary: input.changeSummary || "Pengetahuan baru diajukan.",
       content: input.content,
       creator: "Pemilik konten",
       status: submit ? "review" : "draft",
       sourceVerified: false,
+      metadata: { title: input.title, summary: input.summary, category: input.category, source: input.source, touchpoints: input.touchpoints, effectiveDate: input.effectiveDate, expiryDate: input.expiryDate },
     };
-    dispatch({ type: "upsert-knowledge", item, version, submit });
+    dispatch({ type: "upsert-knowledge", item, version, submit, reviewId: pendingReview?.id });
     return item;
   }
 

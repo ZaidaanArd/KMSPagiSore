@@ -1,4 +1,5 @@
 import type { KmsData } from "@/lib/types";
+import { localDate } from "@/lib/utils";
 
 export const seedData: KmsData = {
   role: "reviewer",
@@ -48,7 +49,7 @@ export const seedData: KmsData = {
     {
       id: "menu-paket-keluarga",
       title: "Detail paket keluarga",
-      content: "Rincian item paket, pilihan lauk, serta item tambahan yang dikenakan biaya terpisah.",
+      content: "Paket keluarga berisi empat pilihan lauk.",
       summary: "Detail paket perlu menjelaskan item tambahan secara konsisten.",
       category: "Menu & paket",
       source: "Daftar menu outlet",
@@ -62,7 +63,7 @@ export const seedData: KmsData = {
     {
       id: "syarat-promo-akhir-pekan",
       title: "Syarat promo akhir pekan",
-      content: "Promo berlaku pada Sabtu dan Minggu untuk metode pembayaran terpilih dengan minimum transaksi Rp200.000.",
+      content: "Promo berlaku pada akhir pekan untuk pembayaran kartu.",
       summary: "Syarat pembayaran dan periode promo diperjelas.",
       category: "Promosi & pembayaran",
       source: "Dokumen ketentuan promosi",
@@ -157,7 +158,7 @@ export const seedData: KmsData = {
       content: "Promo Sabtu–Minggu, minimum transaksi Rp200.000, menggunakan kartu terpilih, dan tidak dapat digabung.",
       creator: "Pemilik konten promosi",
       status: "review",
-      sourceVerified: true,
+      sourceVerified: false,
     },
     {
       id: "ver-promo-11",
@@ -250,5 +251,22 @@ export const seedData: KmsData = {
 };
 
 export function cloneSeedData(): KmsData {
-  return JSON.parse(JSON.stringify(seedData)) as KmsData;
+  const data = JSON.parse(JSON.stringify(seedData)) as KmsData;
+  const dates: Record<string, [number, number]> = {
+    "panduan-struk-parkir": [-14, 30],
+    "faq-validasi-transaksi": [-10, 30],
+    "arsip-parkir-agustus": [-90, -30],
+    "menu-paket-keluarga": [-14, 45],
+    "syarat-promo-akhir-pekan": [-14, 25],
+    "panduan-item-tambahan": [-14, 45],
+  };
+  data.knowledge = data.knowledge.map((item) => {
+    const [start, end] = dates[item.id];
+    return { ...item, effectiveDate: localDate(start), expiryDate: localDate(end), status: item.activeVersionId && item.status !== "expired" ? "active" : item.status };
+  });
+  data.promotions = data.promotions.map((promo) => {
+    const [start, end] = promo.id === "promo-makan-siang" ? [-7, 14] : promo.id === "promo-kartu-bank" ? [-10, 3] : [-60, -30];
+    return { ...promo, periodStart: localDate(start), periodEnd: localDate(end) };
+  });
+  return data;
 }

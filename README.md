@@ -13,6 +13,8 @@ Portal staf untuk mencari, mengelola, meninjau, dan melacak versi pengetahuan la
 
 Data aplikasi disimpan secara lokal di browser menggunakan `localStorage`. Tidak ada database atau environment variable yang diperlukan.
 
+Website ini adalah **prototipe akademik**. Semua konten awal bertanda **Data simulasi**. Masa berlaku contoh dihitung relatif terhadap tanggal saat data awal dibuat, sementara status aktif/kedaluwarsa dihitung ulang dari tanggal yang tersimpan. Peran pada avatar hanya untuk mendemonstrasikan alur, bukan autentikasi operasional.
+
 ## Menjalankan Lokal
 
 ```powershell
@@ -42,6 +44,15 @@ Role dapat diganti melalui avatar kanan atas:
 - Admin: akses penuh
 
 Gunakan **Reset data** pada menu avatar untuk mengembalikan data awal. State disimpan dengan key `pagi-sore-kms-v1`.
+
+## Alur prototipe Minggu 3
+
+1. Buka **Cari**. Kata kunci awal kosong dan filter status dimulai pada **Aktif**; **Hapus filter** menampilkan semua status tanpa kata kunci.
+2. Buka detail pengetahuan aktif, lalu **Laporkan informasi tidak sesuai**. Setelah mengirim, halaman menampilkan nomor laporan, status **Menunggu triage**, dan langkah berikutnya.
+3. Buka **Review**, pilih pengajuan yang menunggu, lalu **Kembalikan revisi**. Formulir membuka pengajuan yang sama beserta isinya. Perbaiki dan **Kirim ulang revisi**; ID review dan versi dipertahankan. Versi lama tetap tersedia sampai pengajuan disetujui.
+4. Buka **Promosi** untuk melihat status yang mengikuti periode: aktif, akan berakhir (lima hari terakhir), dan kedaluwarsa.
+
+Bukti sebelum/sesudah untuk tiga temuan Tabel 8 ada di `docs/usability-evidence/`. Untuk mengulang pemeriksaan interaksi di lingkungan Codex lokal, jalankan `node scripts/verify-flows.cjs` saat dev server aktif. Skrip ini menguji T1–T5 pada viewport desktop dan HP dengan data browser terpisah.
 
 ## Deploy ke Vercel
 
